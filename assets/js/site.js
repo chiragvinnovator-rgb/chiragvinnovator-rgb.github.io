@@ -157,7 +157,7 @@
           (r.description ? '<span>' + esc(r.description) + '</span>' : '') + '<small>' + esc(meta) + '</small></a></li>';
       }).join('');
       var avatar = user && user.avatar_url ? '<img class="win-avatar" src="' + esc(user.avatar_url) + '&s=120" alt="" width="54" height="54">' : badge;
-      var line = '@' + d.github + (user && user.public_repos != null ? ' · ' + user.public_repos + ' public repositories' : '');
+      var line = '@' + d.github;   // no count: the list below leaves out the website's own repository
       // The name always comes from this site, never from the GitHub profile, so it stays as the owner wants it shown.
       content.innerHTML = who(avatar, d.name, line) +
         (list ? '<ul class="win-list">' + list + '</ul>' : '<p>No public repositories to show yet.</p>');
