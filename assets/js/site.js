@@ -148,7 +148,9 @@
     };
 
     var renderRepos = function (user, repos) {
-      var list = repos.filter(function (r) { return !r.fork; }).slice(0, 12).map(function (r) {
+      // Leave out forks and the repository this website is published from (<user>.github.io): it holds only the built pages.
+      var self = (d.github + '.github.io').toLowerCase();
+      var list = repos.filter(function (r) { return !r.fork && String(r.name).toLowerCase() !== self; }).slice(0, 12).map(function (r) {
         var when = r.pushed_at ? new Date(r.pushed_at).toLocaleDateString(undefined, { month: 'short', year: 'numeric' }) : '';
         var meta = [r.language, when ? 'updated ' + when : '', r.stargazers_count ? r.stargazers_count + ' stars' : ''].filter(Boolean).join(' · ');
         return '<li><a href="' + esc(r.html_url) + '" target="_blank" rel="noopener"><strong>' + esc(r.name) + '</strong>' +
