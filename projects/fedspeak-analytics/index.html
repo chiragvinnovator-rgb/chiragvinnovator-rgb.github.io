@@ -13,7 +13,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../../assets/css/site.css?v=82ad0a0d">
+<link rel="stylesheet" href="../../assets/css/site.css?v=4b074723">
 <script>document.documentElement.classList.add('js');</script>
 <script type="importmap">
 {
@@ -787,9 +787,14 @@ function startCards(canvases) {
     return c;
   });
 
-  function draw(c, t, dt) {
-    if (lost || !c.ctx) return;
-    if (!c.view) c.view = makeView(c.slug, { fill: 0.94, floor: 0.32, data: c.canvas.dataset });
+  let builtThisFrame = false;                          // build at most one new scene per frame, so pages never stutter
+  function draw(c, t, dt, force = false) {
+    if (lost || !c.ctx || !c.canvas.clientWidth || !c.canvas.clientHeight) return;   // hidden (a library filter) or not laid out
+    if (!c.view) {
+      if (builtThisFrame && !force) return;
+      c.view = makeView(c.slug, { fill: 0.94, floor: 0.32, data: c.canvas.dataset });
+      builtThisFrame = true;
+    }
     const w = Math.max(1, Math.round(c.canvas.clientWidth * ratio)), h = Math.max(1, Math.round(c.canvas.clientHeight * ratio));
     if (w !== c.w || h !== c.h) { c.w = w; c.h = h; c.canvas.width = w; c.canvas.height = h; c.view.frame(w / h); }
     if (reduce) c.view.pose(0.3, 0, 0, 1);             // reduced motion: one still frame of the finished state
@@ -807,7 +812,7 @@ function startCards(canvases) {
       for (const en of entries) {
         const c = cards.find((x) => x.canvas === en.target);
         c.seen = en.isIntersecting;
-        if (reduce && c.seen) draw(c, 0, 0);
+        if (reduce && c.seen) draw(c, 0, 0, true);
       }
     }, { threshold: 0.01 });
     cards.forEach((c) => io.observe(c.canvas));
@@ -815,8 +820,8 @@ function startCards(canvases) {
     cards.forEach((c) => { c.seen = true; });
   }
   if (reduce) {
-    if ('ResizeObserver' in window) new ResizeObserver(() => cards.forEach((c) => { if (c.seen) draw(c, 0, 0); })).observe(document.body);
-    if (!('IntersectionObserver' in window)) cards.forEach((c) => draw(c, 0, 0));
+    if ('ResizeObserver' in window) new ResizeObserver(() => cards.forEach((c) => { if (c.seen) draw(c, 0, 0, true); })).observe(document.body);
+    if (!('IntersectionObserver' in window)) cards.forEach((c) => draw(c, 0, 0, true));
   } else {
     let lastT = 0;
     const tick = () => {
@@ -825,6 +830,7 @@ function startCards(canvases) {
       if (slow && t - lastT < 0.05) return;            // about 20 frames a second without a graphics chip
       const dt = Math.min(t - lastT, 0.1);
       lastT = t;
+      builtThisFrame = false;
       for (const c of cards) if (c.seen) draw(c, t, dt);
     };
     requestAnimationFrame(tick);
@@ -833,8 +839,8 @@ function startCards(canvases) {
   // Test handle: draw one card at a pointer position at once, or measure how much of its box the scene uses.
   window.__cardHeroes = {
     slugs: cards.map((c) => c.slug), slow,
-    pose(i, px, py, t = 0) { const c = cards[i]; c.ptr.sx = px; c.ptr.sy = py; c.ptr.x = px; c.ptr.y = py; c.ptr.last = clock.elapsedTime + 600; draw(c, t, 0); },
-    reach(i) { const c = cards[i]; if (!c.view) draw(c, 0, 0); return c.view.reach(); },
+    pose(i, px, py, t = 0) { const c = cards[i]; c.ptr.sx = px; c.ptr.sy = py; c.ptr.x = px; c.ptr.y = py; c.ptr.last = clock.elapsedTime + 600; draw(c, t, 0, true); },
+    reach(i) { const c = cards[i]; if (!c.view) draw(c, 0, 0, true); return c.view.reach(); },
     pointer(i) { const p = cards[i].ptr; return { x: p.x, sx: p.sx, following: clock.elapsedTime - p.last <= IDLE_AFTER }; }
   };
 }

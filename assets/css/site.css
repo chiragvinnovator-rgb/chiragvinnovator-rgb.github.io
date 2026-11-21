@@ -172,7 +172,7 @@ html:not(.ready) .statebar, html:not(.ready) .callout { display: none; }
 .card:hover .thumb { border-color: rgba(241, 234, 219, 0.4); }
 .card .thumb svg { width: 76%; height: 70%; transition: opacity 0.8s; }
 /* homepage featured cards: the project's own 3D scene over its line drawing (drawn by src/project-heroes.js) */
-.card .thumb.has-scene { overflow: hidden; }
+.card .thumb.has-scene { overflow: hidden; height: auto; aspect-ratio: 2 / 1; }   /* room for the 3D scene */
 .card .thumb .card-scene { position: absolute; inset: 0; width: 100%; height: 100%; display: block; opacity: 0; transition: opacity 0.9s; pointer-events: none; }
 .card .thumb.scene-ready .card-scene { opacity: 1; }
 .card .thumb.scene-ready svg { opacity: 0; }
