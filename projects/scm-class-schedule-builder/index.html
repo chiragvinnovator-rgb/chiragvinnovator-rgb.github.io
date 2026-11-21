@@ -13,7 +13,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../../assets/css/site.css?v=ae6ff37b">
+<link rel="stylesheet" href="../../assets/css/site.css?v=82ad0a0d">
 <script>document.documentElement.classList.add('js');</script>
 <script type="importmap">
 {
@@ -520,27 +520,66 @@ const HEROES = {
         });
       }
     };
+  },
+
+  // The project library (the homepage's "View all projects" tile, not a project): one book per project on a shelf,
+  // grouped and coloured by kind of work. The pointer runs along the shelf and draws each book out in turn; on its own
+  // it browses from end to end. The group sizes come from the page (data-groups), so the shelf follows the library.
+  'all-projects'(stage, data = {}) {
+    const counts = String(data.groups || '2,2,1,3,2').split(',').map((n) => Math.max(0, parseInt(n, 10) || 0));
+    const COLS = [C.cream, 0x2f8279, C.sand, 0x9fd9cc, C.verm];   // work experience, capstone, faculty, group, independent
+    const bandMat = mat(0xf6efde, { rough: 0.4 }), mintCol = new THREE.Color(C.mint);
+    const books = [];
+    let x = 0;
+    counts.forEach((n, g) => {
+      for (let k = 0; k < n; k++) {
+        const i = books.length;
+        const h = 1.05 + ((i * 37) % 7) / 20, w = 0.26 + ((i * 53) % 5) / 50;   // varied, like real books
+        const m = mat(COLS[g % COLS.length], { rough: 0.55 });
+        const grp = new THREE.Group();
+        grp.add(box(m, w, h, 0.95, 0, h / 2, 0), box(bandMat, w + 0.012, 0.045, 0.97, 0, h * 0.78, 0));
+        stage.add(grp);
+        books.push({ grp, m, x: x + w / 2 });
+        x += w + 0.05;
+      }
+      if (n) x += 0.22;                                // a gap between groups
+    });
+    const width = Math.max(0.1, x - 0.27);
+    books.forEach((b) => { b.x -= width / 2; });
+    stage.add(box(mat(C.dark, { rough: 0.7 }), width + 0.5, 0.1, 1.25, 0, -0.05, 0));
+    [-1, 1].forEach((s) => stage.add(box(mat(C.ink, { rough: 0.6 }), 0.08, 0.75, 1.0, s * (width / 2 + 0.2), 0.375, 0)));
+    const marker = box(mat(C.mint, { glow: 1.3 }), 0.3, 0.03, 0.06);   // the selection mark on the shelf's front edge
+    stage.add(marker);
+    return {
+      cam: [0, 2.6, 8.6], look: [0, 0.7, 0], yaw: -0.25,
+      update({ t, u }) {
+        const n = books.length, at = u * Math.max(0, n - 1);
+        books.forEach((b, i) => {
+          const d = i - at;
+          const near = Math.exp(-d * d / 0.3);         // 1 for the book being drawn out
+          const side = Math.exp(-d * d / 2.5) - near;  // its neighbours, which lean away
+          b.grp.position.set(b.x, near * 0.18, near * 0.72);
+          b.grp.rotation.set(near * 0.18, 0, -Math.sign(d) * side * 0.12 + Math.sin(t * 1.3 + i) * 0.008);
+          b.m.emissive.copy(mintCol); b.m.emissiveIntensity = near * 0.32;
+        });
+        const i0 = Math.min(n - 1, Math.floor(at)), f = at - i0;
+        const mx = n ? lerp(books[i0].x, books[Math.min(n - 1, i0 + 1)].x, f) : 0;
+        marker.position.set(mx, 0.02, 0.66);
+      }
+    };
   }
 };
 
 // How far the stage turns and tips with the pointer (radians), and how much of the plate a scene may fill.
 const TURN = 0.5, TILT = 0.16, FILL = 0.86;
+const IDLE_AFTER = 3.5;                                // seconds without the pointer before a scene plays on its own
 
-function start(canvas) {
-  const build = HEROES[canvas.dataset.hero];
-  if (!build) return;
-  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  let renderer;
-  try {
-    renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
-  } catch (err) {
-    return;                                            // the line drawing under the canvas stays
-  }
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-  renderer.setClearColor(0x000000, 0);
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.12;
-
+// One project's scene: its lights, camera and stage, posed by a pointer position and framed to any plate shape.
+// A case-study page shows one view in its header; the homepage shows one view in each featured card. Small card
+// boxes use a fuller frame and a fainter floor grid (options `fill` and `floor`) so the objects read at that size.
+function makeView(slug, { fill = FILL, floor: floorOpacity = 0.55, data = {} } = {}) {
+  const build = HEROES[slug];
+  if (!build) return null;
   const scene = new THREE.Scene();
   scene.add(new THREE.HemisphereLight(0xcfe4dd, 0x06100f, 0.85));
   const key = new THREE.DirectionalLight(0xffe6cc, 2.7); key.position.set(4, 8, 6); scene.add(key);
@@ -550,9 +589,9 @@ function start(canvas) {
   const stage = new THREE.Group();
   scene.add(stage);
   const floor = new THREE.GridHelper(14, 28, 0x2a4d48, 0x16302d);
-  floor.material.transparent = true; floor.material.opacity = 0.55;
+  floor.material.transparent = true; floor.material.opacity = floorOpacity;
   stage.add(floor);
-  const hero = build(stage);
+  const hero = build(stage, data);                     // data: the canvas's data- attributes, for scenes that need them
 
   // Put the scene in the state it has for one pointer position (px, py from -1 to 1) at time t.
   function pose(px, py, t, u = clamp01((px + 1) / 2)) {
@@ -564,7 +603,7 @@ function start(canvas) {
   // Framing. A scene only names the direction it is viewed from (cam, look). The distance and the exact centre are
   // worked out here: the scene is tried in every position the pointer can put it in, and the camera is moved until
   // all of it sits inside the plate with a margin. So a new scene never needs its camera tuned by hand, and nothing
-  // is cut off whether the plate is wide (phones) or narrow.
+  // is cut off whether the plate is wide (phones, homepage cards) or narrow.
   const eye = new THREE.Vector3(...hero.cam), aim = new THREE.Vector3(...hero.look);
   const dir = eye.clone().sub(aim).normalize(), startDist = eye.distanceTo(aim);
   const centre = new THREE.Vector3(), side = new THREE.Vector3(), rise = new THREE.Vector3(), corner = new THREE.Vector3();
@@ -588,7 +627,8 @@ function start(canvas) {
     return e;
   }
   function place(dist) { camera.position.copy(centre).addScaledVector(dir, dist); camera.lookAt(centre); camera.updateMatrixWorld(true); }
-  function frameScene() {
+  function frame(aspect) {                             // fit the scene to a plate of this shape (width / height)
+    camera.aspect = aspect; camera.updateProjectionMatrix();
     let dist = startDist;
     centre.copy(aim);
     for (let pass = 0; pass < 5; pass++) {
@@ -597,10 +637,55 @@ function start(canvas) {
       const halfH = Math.tan(camera.fov * Math.PI / 360) * dist, halfW = halfH * camera.aspect;
       side.setFromMatrixColumn(camera.matrixWorld, 0); rise.setFromMatrixColumn(camera.matrixWorld, 1);
       centre.addScaledVector(side, (e.x0 + e.x1) / 2 * halfW).addScaledVector(rise, (e.y0 + e.y1) / 2 * halfH);
-      dist *= Math.max(e.x1 - e.x0, e.y1 - e.y0) / 2 / FILL;
+      dist *= Math.max(e.x1 - e.x0, e.y1 - e.y0) / 2 / fill;
     }
     place(dist);
   }
+  return { slug, scene, camera, stage, floor, pose, reach, frame };
+}
+
+function makeRenderer(canvas) {
+  const renderer = new THREE.WebGLRenderer(canvas ? { canvas, antialias: true, alpha: true } : { antialias: true, alpha: true });
+  renderer.setClearColor(0x000000, 0);
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.12;
+  return renderer;
+}
+
+// True when the browser draws 3D without a graphics chip (much slower), so the cards animate at a lower rate.
+function isSoftware(renderer) {
+  try {
+    const gl = renderer.getContext(), ext = gl.getExtension('WEBGL_debug_renderer_info');
+    const name = ext ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)) : '';
+    return /swiftshader|llvmpipe|software|basic render/i.test(name);
+  } catch (err) {
+    return false;
+  }
+}
+
+// Follow the pointer; when it has been still for a few seconds (or there is none), play on a slow loop.
+// `phase` shifts the loop so several scenes on one page do not move in step. Returns u, from 0 to 1.
+function follow(ptr, t, dt, phase = 0) {
+  const idle = t - ptr.last > IDLE_AFTER;
+  const tx = idle ? Math.sin(t * 0.55 + phase) * 0.85 : ptr.x, ty = idle ? Math.sin(t * 0.37 + phase) * 0.35 : ptr.y;
+  const k = 1 - Math.exp(-dt * (idle ? 2 : 7));
+  ptr.sx += (tx - ptr.sx) * k; ptr.sy += (ty - ptr.sy) * k;
+  return clamp01((ptr.sx + 1) / 2);
+}
+
+// ---------- a case-study page: one scene in the header plate ----------
+function start(canvas) {
+  const view = makeView(canvas.dataset.hero);
+  if (!view) return;
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let renderer;
+  try {
+    renderer = makeRenderer(canvas);
+  } catch (err) {
+    return;                                            // the line drawing under the canvas stays
+  }
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  const { scene, camera } = view;
 
   // The pointer is read across the whole page header, not just over the scene.
   const zone = canvas.closest('[data-hero-zone]') || canvas;
@@ -617,15 +702,10 @@ function start(canvas) {
   function draw() {
     const dt = Math.min(clock.getDelta(), 0.1), t = clock.elapsedTime;
     if (reduce) {
-      pose(0.3, 0, 0, 1);                              // reduced motion: one still frame of the finished state
+      view.pose(0.3, 0, 0, 1);                         // reduced motion: one still frame of the finished state
     } else {
-      // Follow the pointer; when it has been still for a few seconds (or there is none), play on a slow loop.
-      const idle = t - ptr.last > 3.5;
-      const tx = idle ? Math.sin(t * 0.55) * 0.85 : ptr.x, ty = idle ? Math.sin(t * 0.37) * 0.35 : ptr.y;
-      const k = 1 - Math.exp(-dt * (idle ? 2 : 7));
-      ptr.sx += (tx - ptr.sx) * k; ptr.sy += (ty - ptr.sy) * k;
-      u = clamp01((ptr.sx + 1) / 2);
-      pose(ptr.sx, ptr.sy, t, u);
+      u = follow(ptr, t, dt);
+      view.pose(ptr.sx, ptr.sy, t, u);
     }
     renderer.render(scene, camera);
     if (first) { first = false; document.documentElement.classList.add('hero-ready'); }
@@ -635,8 +715,7 @@ function start(canvas) {
   function fit() {
     const w = canvas.clientWidth || 400, h = canvas.clientHeight || 300;
     renderer.setSize(w, h, false);
-    camera.aspect = w / h; camera.updateProjectionMatrix();
-    frameScene();
+    view.frame(w / h);
     if (!first) draw();                                // resizing clears the canvas, so draw again straight away
   }
   fit();
@@ -650,14 +729,105 @@ function start(canvas) {
   // Test handle. set() holds the pointer at a position; pose() draws one position at once, without waiting for a
   // frame; reach() reports how much of the plate the scene uses (each value should stay inside -1 to 1).
   window.__projectHero = {
-    get u() { return u; }, name: canvas.dataset.hero, stage, camera, floor, reach,
+    get u() { return u; }, name: view.slug, stage: view.stage, camera, floor: view.floor, reach: view.reach,
     set(px, py) { ptr.x = px; ptr.y = py; ptr.sx = px; ptr.sy = py; ptr.last = clock.elapsedTime + 600; },
-    pose(px, py, t = 0) { pose(px, py, t); renderer.render(scene, camera); }
+    pose(px, py, t = 0) { view.pose(px, py, t); renderer.render(scene, camera); }
+  };
+}
+
+// ---------- the homepage: each featured card shows its project's scene ----------
+// One shared renderer draws every card that is on screen and copies the picture into that card's own canvas, so the
+// page needs one extra graphics context however many cards there are. A card's scene is built the first time the
+// card comes into view. It follows the pointer while the pointer is over the card, and plays on its own otherwise.
+function startCards(canvases) {
+  const items = [...canvases].filter((c) => HEROES[c.dataset.hero] && c.getContext);
+  if (!items.length) return;
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let renderer;
+  try {
+    renderer = makeRenderer();
+  } catch (err) {
+    return;                                            // the line drawings stay
+  }
+  renderer.setPixelRatio(1);                           // card sizes below are already in device pixels
+  const ratio = Math.min(window.devicePixelRatio || 1, 1.5);
+  const q = new URLSearchParams(location.search).get('q');
+  const slow = q === 'lite' || (q !== 'full' && isSoftware(renderer));
+  const clock = new THREE.Clock(), size = new THREE.Vector2();
+  let lost = false;
+  renderer.domElement.addEventListener('webglcontextlost', (e) => { e.preventDefault(); lost = true; });
+  renderer.domElement.addEventListener('webglcontextrestored', () => { lost = false; cards.forEach((c) => { c.w = 0; }); });
+
+  const cards = items.map((canvas, i) => {
+    const c = { canvas, ctx: canvas.getContext('2d'), thumb: canvas.parentElement, card: canvas.closest('.card') || canvas,
+      slug: canvas.dataset.hero, view: null, ptr: { x: 0, y: 0, sx: 0, sy: 0, last: -10 }, phase: i * 1.9, seen: false, w: 0, h: 0, drawn: false };
+    c.card.addEventListener('pointermove', (e) => {
+      if (e.pointerType === 'touch') return;
+      const r = c.card.getBoundingClientRect();
+      c.ptr.x = clamp01((e.clientX - r.left) / r.width) * 2 - 1;
+      c.ptr.y = clamp01((e.clientY - r.top) / r.height) * 2 - 1;
+      c.ptr.last = clock.elapsedTime;
+    }, { passive: true });
+    c.card.addEventListener('pointerleave', () => { c.ptr.last = -10; });
+    return c;
+  });
+
+  function draw(c, t, dt) {
+    if (lost || !c.ctx) return;
+    if (!c.view) c.view = makeView(c.slug, { fill: 0.94, floor: 0.32, data: c.canvas.dataset });
+    const w = Math.max(1, Math.round(c.canvas.clientWidth * ratio)), h = Math.max(1, Math.round(c.canvas.clientHeight * ratio));
+    if (w !== c.w || h !== c.h) { c.w = w; c.h = h; c.canvas.width = w; c.canvas.height = h; c.view.frame(w / h); }
+    if (reduce) c.view.pose(0.3, 0, 0, 1);             // reduced motion: one still frame of the finished state
+    else c.view.pose(c.ptr.sx, c.ptr.sy, t, follow(c.ptr, t, dt, c.phase));
+    renderer.getSize(size);
+    if (size.x !== w || size.y !== h) renderer.setSize(w, h, false);
+    renderer.render(c.view.scene, c.view.camera);
+    c.ctx.clearRect(0, 0, w, h);
+    c.ctx.drawImage(renderer.domElement, 0, 0);
+    if (!c.drawn) { c.drawn = true; c.thumb.classList.add('scene-ready'); }
+  }
+
+  if ('IntersectionObserver' in window) {
+    const io = new IntersectionObserver((entries) => {
+      for (const en of entries) {
+        const c = cards.find((x) => x.canvas === en.target);
+        c.seen = en.isIntersecting;
+        if (reduce && c.seen) draw(c, 0, 0);
+      }
+    }, { threshold: 0.01 });
+    cards.forEach((c) => io.observe(c.canvas));
+  } else {
+    cards.forEach((c) => { c.seen = true; });
+  }
+  if (reduce) {
+    if ('ResizeObserver' in window) new ResizeObserver(() => cards.forEach((c) => { if (c.seen) draw(c, 0, 0); })).observe(document.body);
+    if (!('IntersectionObserver' in window)) cards.forEach((c) => draw(c, 0, 0));
+  } else {
+    let lastT = 0;
+    const tick = () => {
+      requestAnimationFrame(tick);
+      const t = clock.getElapsedTime();
+      if (slow && t - lastT < 0.05) return;            // about 20 frames a second without a graphics chip
+      const dt = Math.min(t - lastT, 0.1);
+      lastT = t;
+      for (const c of cards) if (c.seen) draw(c, t, dt);
+    };
+    requestAnimationFrame(tick);
+  }
+
+  // Test handle: draw one card at a pointer position at once, or measure how much of its box the scene uses.
+  window.__cardHeroes = {
+    slugs: cards.map((c) => c.slug), slow,
+    pose(i, px, py, t = 0) { const c = cards[i]; c.ptr.sx = px; c.ptr.sy = py; c.ptr.x = px; c.ptr.y = py; c.ptr.last = clock.elapsedTime + 600; draw(c, t, 0); },
+    reach(i) { const c = cards[i]; if (!c.view) draw(c, 0, 0); return c.view.reach(); },
+    pointer(i) { const p = cards[i].ptr; return { x: p.x, sx: p.sx, following: clock.elapsedTime - p.last <= IDLE_AFTER }; }
   };
 }
 
 const el = document.getElementById('project-scene');
 if (el) start(el);
+const cardCanvases = document.querySelectorAll('canvas.card-scene[data-hero]');
+if (cardCanvases.length) startCards(cardCanvases);
 </script>
 </body>
 </html>

@@ -170,7 +170,12 @@ html:not(.ready) .statebar, html:not(.ready) .callout { display: none; }
   transition: transform 0.35s var(--ease), border-color 0.3s; transform-style: preserve-3d;
 }
 .card:hover .thumb { border-color: rgba(241, 234, 219, 0.4); }
-.card .thumb svg { width: 76%; height: 70%; }
+.card .thumb svg { width: 76%; height: 70%; transition: opacity 0.8s; }
+/* homepage featured cards: the project's own 3D scene over its line drawing (drawn by src/project-heroes.js) */
+.card .thumb.has-scene { overflow: hidden; }
+.card .thumb .card-scene { position: absolute; inset: 0; width: 100%; height: 100%; display: block; opacity: 0; transition: opacity 0.9s; pointer-events: none; }
+.card .thumb.scene-ready .card-scene { opacity: 1; }
+.card .thumb.scene-ready svg { opacity: 0; }
 .card .kind { font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--flow); }
 .card h3 { font-size: 24px; line-height: 1.15; }
 .card p { color: var(--muted); font-size: 15px; }
@@ -191,6 +196,7 @@ html:not(.ready) .statebar, html:not(.ready) .callout { display: none; }
 }
 .rail-track::-webkit-scrollbar { display: none; }
 .rail-track .card { scroll-snap-align: start; min-height: 100%; }
+.rail-track .card .thumb { height: auto; aspect-ratio: 2 / 1; }   /* taller than library cards: room for the 3D scenes */
 .card-all { background: var(--bg-2); }
 .card-all .thumb { color: var(--paper); }
 .card-all h3 { font-size: 28px; }
@@ -491,7 +497,7 @@ html:not(.ready) .statebar, html:not(.ready) .callout { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
-  #scene, .hero-still, .callout, .btn, .seg, .card .thumb, .cursor-ring, .plate canvas, .plate svg, .steps::after, .back span, .back-float, .rail-thumb { transition: none; }
+  #scene, .hero-still, .callout, .btn, .seg, .card .thumb, .card .thumb svg, .card-scene, .cursor-ring, .plate canvas, .plate svg, .steps::after, .back span, .back-float, .rail-thumb { transition: none; }
   .js .reveal { opacity: 1; transform: none; transition: none; }
   .js .steps:not(.in)::after { transform: none; }
 }
